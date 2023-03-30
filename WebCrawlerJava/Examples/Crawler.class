@@ -1,0 +1,60 @@
+package org.example;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.HashSet;
+import java.util.Iterator;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+public class Crawler {
+    private HashSet<String> urlSet = new HashSet();
+    private int MAX_DEPTH = 2;
+    private static Connection connection = null;
+
+    public Crawler() {
+        connection = DatabaseConnection.getConnection();
+    }
+
+    public void getPageTextAndLinks(String url, int depth) {
+        if (!this.urlSet.contains(url)) {
+            if (depth < this.MAX_DEPTH) {
+                if (this.urlSet.add(url)) {
+                    System.out.println(url);
+                }
+
+                ++depth;
+
+                try {
+                    Document document = Jsoup.connect(url).timeout(5000).get();
+                    String title = document.title();
+                    String text = document.text().length() < 500 ? document.text() : document.text().substring(0, 499);
+                    PreparedStatement preparedStatement = connection.prepareStatement("Insert into pages values(?,?,?);");
+                    preparedStatement.setString(1, title);
+                    preparedStatement.setString(2, url);
+                    preparedStatement.setString(3, text);
+                    preparedStatement.executeUpdate();
+                    Elements availableLinksOnPage = document.select("a[href]");
+                    Iterator var9 = availableLinksOnPage.iterator();
+
+                    while(var9.hasNext()) {
+                        Element currentLink = (Element)var9.next();
+                        this.getPageTextAndLinks(currentLink.attr("abs:href"), depth);
+                    }
+                } catch (SQLException | IOException var11) {
+                    var11.printStackTrace();
+                }
+
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        Crawler crawler = new Crawler();
+        crawler.getPageTextAndLinks("https://www.javatpoint.com", 0);
+    }
+}
